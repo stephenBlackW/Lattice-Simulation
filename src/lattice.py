@@ -193,6 +193,67 @@ class Lattice4D:
             total += self.compute_site_energy(pos, k, a0)
         return total
 
+    def compute_site_force(self, pos: Tuple[int, int, int, int],
+                           k: float = 1.0, a0: float = 1.0) -> np.ndarray:
+        """Compute force on a site from all its neighbors.
+
+        For a spring connecting site i to neighbor j:
+        - r_ij = vector from i to j
+        - Force on i: F_i = k(|r_ij| - a0) * (r_ij/|r_ij|)
+        - Stretched spring (|r| > a0): pulls i toward j
+        - Compressed spring (|r| < a0): pushes i away from j
+
+        Args:
+            pos: Site position
+            k: Spring constant
+            a0: Ideal bond length
+
+        Returns:
+            4D force vector on this site
+        """
+        force = np.zeros(4)
+        for neighbor in self.get_neighbors(pos):
+            r = self.get_actual_neighbor_vector(pos, neighbor)
+            distance = np.linalg.norm(r)
+            if distance > 1e-10:  # Avoid division by zero
+                # Force pulls/pushes site toward equilibrium distance
+                force_magnitude = k * (distance - a0)
+                force += force_magnitude * (r / distance)
+        return force
+
+    def compute_all_forces(self, k: float = 1.0, a0: float = 1.0) -> Dict[Tuple[int, int, int, int], np.ndarray]:
+        """Compute forces on all sites.
+
+        Args:
+            k: Spring constant
+            a0: Ideal bond length
+
+        Returns:
+            Dictionary mapping positions to force vectors
+        """
+        forces = {}
+        for pos in self.displacements:
+            forces[pos] = self.compute_site_force(pos, k, a0)
+        return forces
+
+    def compute_max_force(self, k: float = 1.0, a0: float = 1.0) -> float:
+        """Compute maximum force magnitude in the lattice.
+
+        Args:
+            k: Spring constant
+            a0: Ideal bond length
+
+        Returns:
+            Maximum force magnitude
+        """
+        max_force = 0.0
+        for pos in self.displacements:
+            force = self.compute_site_force(pos, k, a0)
+            force_mag = np.linalg.norm(force)
+            if force_mag > max_force:
+                max_force = force_mag
+        return max_force
+
     def get_statistics(self) -> dict:
         """Get basic statistics about the lattice.
 

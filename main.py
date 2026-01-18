@@ -1,4 +1,4 @@
-"""Main script for 4D lattice dislocation simulation - Phases 1 & 2."""
+"""Main script for 4D lattice dislocation simulation - Phases 1, 2 & 3."""
 
 import os
 import sys
@@ -7,7 +7,13 @@ import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for saving figures
 import matplotlib.pyplot as plt
 
-from config import LATTICE_SIZE, SPRING_CONSTANT, IDEAL_BOND_LENGTH
+from config import (
+    LATTICE_SIZE,
+    SPRING_CONSTANT,
+    IDEAL_BOND_LENGTH,
+    RELAXATION_TOLERANCE,
+    MAX_RELAXATION_STEPS,
+)
 from src.lattice import Lattice4D
 from src.dislocation import (
     introduce_simple_dislocation,
@@ -20,7 +26,10 @@ from src.visualization import (
     plot_displacement_field,
     plot_strain_energy_field,
     plot_comparison,
+    plot_convergence,
+    plot_relaxed_comparison,
 )
+from src.relaxation import relax
 
 
 def ensure_directories():
@@ -209,8 +218,124 @@ def phase2_dislocation_introduction(lattice=None, N=LATTICE_SIZE):
     return results
 
 
+def phase3_relaxation(unrelaxed_lattices: dict, N=LATTICE_SIZE):
+    """Phase 3: Relax dislocated lattices and compare.
+
+    Args:
+        unrelaxed_lattices: Dictionary of unrelaxed lattices from Phase 2
+        N: Lattice size
+
+    Returns:
+        Dictionary of relaxed lattices
+    """
+    print("\n" + "=" * 60)
+    print("PHASE 3: Lattice Relaxation")
+    print("=" * 60)
+
+    print(f"\nRelaxation parameters:")
+    print(f"  Method: FIRE")
+    print(f"  Tolerance: {RELAXATION_TOLERANCE}")
+    print(f"  Max steps: {MAX_RELAXATION_STEPS}")
+
+    relaxed_results = {}
+
+    for direction, unrelaxed in unrelaxed_lattices.items():
+        print(f"\n--- Relaxing b = {direction} ---")
+
+        # Make a copy for relaxation
+        lattice = unrelaxed.copy()
+        initial_energy = lattice.compute_total_energy(SPRING_CONSTANT, IDEAL_BOND_LENGTH)
+        initial_max_force = lattice.compute_max_force(SPRING_CONSTANT, IDEAL_BOND_LENGTH)
+
+        print(f"  Initial energy: {initial_energy:.4f}")
+        print(f"  Initial max force: {initial_max_force:.4f}")
+
+        # Relax
+        print(f"  Relaxing...")
+        result = relax(
+            lattice,
+            method='fire',
+            k=SPRING_CONSTANT,
+            a0=IDEAL_BOND_LENGTH,
+            tolerance=RELAXATION_TOLERANCE,
+            max_steps=MAX_RELAXATION_STEPS,
+            verbose=True,
+            log_interval=500,
+        )
+
+        print(f"  Converged: {result.converged}")
+        print(f"  Iterations: {result.iterations}")
+        print(f"  Final energy: {result.final_energy:.4f}")
+        print(f"  Final max force: {result.final_max_force:.6f}")
+
+        # Energy reduction
+        reduction = (initial_energy - result.final_energy) / initial_energy * 100
+        print(f"  Energy reduction: {reduction:.1f}%")
+
+        # Save relaxed checkpoint
+        checkpoint_path = f'checkpoints/lattice_relaxed_b{direction}'
+        lattice.save_checkpoint(checkpoint_path)
+        print(f"  Saved to {checkpoint_path}.npz")
+
+        # Store results
+        relaxed_results[direction] = {
+            'lattice': lattice,
+            'unrelaxed': unrelaxed,
+            'result': result,
+            'initial_energy': initial_energy,
+        }
+
+        # Plot convergence
+        save_path = f'output/convergence_b{direction}.png'
+        plot_convergence(
+            result.energy_history,
+            result.force_history,
+            title=f'Relaxation Convergence (b = {direction})',
+            save_path=save_path,
+        )
+        plt.close()
+
+        # Plot relaxed vs unrelaxed comparison
+        save_path = f'output/relaxation_comparison_b{direction}.png'
+        plot_relaxed_comparison(
+            unrelaxed,
+            lattice,
+            z_value=0,
+            w_value=0,
+            title=f'Relaxation Comparison (b = {direction})',
+            save_path=save_path,
+        )
+        plt.close()
+
+        # Plot relaxed strain energy
+        save_path = f'output/strain_energy_relaxed_b{direction}.png'
+        plot_strain_energy_field(
+            lattice,
+            z_value=0,
+            w_value=0,
+            title=f'Relaxed Strain Energy (b = {direction})',
+            save_path=save_path,
+        )
+        plt.close()
+
+    # Summary comparison
+    print("\n--- Relaxation Summary ---")
+    print("Burgers | Initial E | Final E   | Reduction | Converged | Iterations")
+    print("-" * 70)
+    for direction, data in relaxed_results.items():
+        result = data['result']
+        initial = data['initial_energy']
+        final = result.final_energy
+        reduction = (initial - final) / initial * 100
+        print(f"  b={direction}   | {initial:9.2f} | {final:9.2f} | {reduction:7.1f}%  | "
+              f"{'Yes' if result.converged else 'No':9s} | {result.iterations}")
+
+    print("\nPhase 3 COMPLETE")
+    return relaxed_results
+
+
 def main():
-    """Run Phases 1 and 2 of the simulation."""
+    """Run Phases 1, 2, and 3 of the simulation."""
     ensure_directories()
 
     print("\n" + "=" * 60)
@@ -220,19 +345,24 @@ def main():
     print(f"  Lattice size: {LATTICE_SIZE}")
     print(f"  Spring constant: {SPRING_CONSTANT}")
     print(f"  Ideal bond length: {IDEAL_BOND_LENGTH}")
+    print(f"  Relaxation tolerance: {RELAXATION_TOLERANCE}")
+    print(f"  Max relaxation steps: {MAX_RELAXATION_STEPS}")
 
     # Phase 1
     lattice = phase1_lattice_construction()
 
     # Phase 2
-    results = phase2_dislocation_introduction(lattice)
+    unrelaxed_results = phase2_dislocation_introduction(lattice)
+
+    # Phase 3
+    relaxed_results = phase3_relaxation(unrelaxed_results)
 
     print("\n" + "=" * 60)
-    print("PHASES 1 & 2 COMPLETE")
+    print("PHASES 1, 2 & 3 COMPLETE")
     print("=" * 60)
-    print("\nReady for Phase 3 (relaxation)")
+    print("\nReady for Phase 4 (strain computation) and Phase 5 (3D visualization)")
 
-    return lattice, results
+    return lattice, unrelaxed_results, relaxed_results
 
 
 if __name__ == "__main__":

@@ -13,4 +13,12 @@ from .visualization import (
     plot_displacement_field,
     plot_strain_energy_field,
     plot_comparison,
+    plot_convergence,
+    plot_relaxed_comparison,
+)
+from .relaxation import (
+    RelaxationResult,
+    gradient_descent,
+    fire,
+    relax,
 )
