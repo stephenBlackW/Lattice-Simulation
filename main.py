@@ -30,6 +30,11 @@ from src.visualization import (
     plot_relaxed_comparison,
 )
 from src.relaxation import relax
+from src.projection import (
+    plot_3d_slice,
+    plot_3d_shadow,
+    create_w_slice_frames,
+)
 
 
 def ensure_directories():
@@ -334,8 +339,104 @@ def phase3_relaxation(unrelaxed_lattices: dict, N=LATTICE_SIZE):
     return relaxed_results
 
 
+def phase5_3d_visualization(relaxed_results: dict):
+    """Phase 5: Generate 3D visualizations.
+
+    Args:
+        relaxed_results: Dictionary from Phase 3 with relaxed lattices
+    """
+    print("\n" + "=" * 60)
+    print("PHASE 5: 3D Visualization")
+    print("=" * 60)
+
+    # Focus on one interesting case: b=w (Burgers in 4th dimension)
+    # This is the most interesting for seeing how 4D structure projects to 3D
+    direction = 'w'
+    if direction not in relaxed_results:
+        direction = list(relaxed_results.keys())[0]
+
+    print(f"\nGenerating 3D visualizations for b={direction}...")
+
+    lattice = relaxed_results[direction]['lattice']
+    unrelaxed = relaxed_results[direction]['unrelaxed']
+    N = lattice.N
+
+    # 1. 3D slice at w=0 (relaxed)
+    print("\n--- 3D Slice Visualization ---")
+    print("  Generating 3D slice at w=0 (relaxed)...")
+    save_path = f'output/3d_slice_relaxed_b{direction}_w0.png'
+    plot_3d_slice(
+        lattice,
+        w_value=0,
+        title=f'3D Slice at w=0 (Relaxed, b={direction})',
+        save_path=save_path,
+    )
+    plt.close()
+
+    # 2. 3D slice at w=N/2 (middle of lattice)
+    print(f"  Generating 3D slice at w={N//2} (relaxed)...")
+    save_path = f'output/3d_slice_relaxed_b{direction}_w{N//2}.png'
+    plot_3d_slice(
+        lattice,
+        w_value=N//2,
+        title=f'3D Slice at w={N//2} (Relaxed, b={direction})',
+        save_path=save_path,
+    )
+    plt.close()
+
+    # 3. 3D shadow projection (sum over w)
+    print("\n--- 3D Shadow Projection ---")
+    print("  Computing sum projection over w dimension...")
+    save_path = f'output/3d_shadow_sum_b{direction}.png'
+    plot_3d_shadow(
+        lattice,
+        aggregation='sum',
+        title=f'3D Shadow (sum over w, b={direction})',
+        save_path=save_path,
+    )
+    plt.close()
+
+    # 4. 3D shadow projection (max over w)
+    print("  Computing max projection over w dimension...")
+    save_path = f'output/3d_shadow_max_b{direction}.png'
+    plot_3d_shadow(
+        lattice,
+        aggregation='max',
+        title=f'3D Shadow (max over w, b={direction})',
+        save_path=save_path,
+    )
+    plt.close()
+
+    # 5. Unrelaxed comparison
+    print("\n--- Unrelaxed vs Relaxed 3D Comparison ---")
+    print("  Generating unrelaxed 3D slice for comparison...")
+    save_path = f'output/3d_slice_unrelaxed_b{direction}_w0.png'
+    plot_3d_slice(
+        unrelaxed,
+        w_value=0,
+        title=f'3D Slice at w=0 (Unrelaxed, b={direction})',
+        save_path=save_path,
+    )
+    plt.close()
+
+    # 6. W-slice frames (can be combined into animation externally)
+    print("\n--- W-Slice Sweep ---")
+    print(f"  Generating {N} frames sweeping through w dimension...")
+    output_dir = f'output/w_slices_b{direction}'
+    create_w_slice_frames(
+        lattice,
+        output_dir=output_dir,
+    )
+
+    print("\nPhase 5 COMPLETE")
+    print(f"\n3D visualizations saved to output/ directory")
+    print(f"W-slice frames saved to {output_dir}/")
+
+    return
+
+
 def main():
-    """Run Phases 1, 2, and 3 of the simulation."""
+    """Run Phases 1, 2, 3, and 5 of the simulation."""
     ensure_directories()
 
     print("\n" + "=" * 60)
@@ -357,10 +458,16 @@ def main():
     # Phase 3
     relaxed_results = phase3_relaxation(unrelaxed_results)
 
+    # Phase 5 (skipping Phase 4 - strain computation is already done per-site)
+    phase5_3d_visualization(relaxed_results)
+
     print("\n" + "=" * 60)
-    print("PHASES 1, 2 & 3 COMPLETE")
+    print("ALL PHASES COMPLETE")
     print("=" * 60)
-    print("\nReady for Phase 4 (strain computation) and Phase 5 (3D visualization)")
+    print("\nOutput summary:")
+    print("  - checkpoints/: Saved lattice states")
+    print("  - output/: 2D slices, 3D visualizations, convergence plots")
+    print("  - output/w_slices_*/: Animated sweep through w dimension")
 
     return lattice, unrelaxed_results, relaxed_results
 

@@ -21,4 +21,15 @@ from .relaxation import (
     gradient_descent,
     fire,
     relax,
+    estimate_progress,
+)
+from .projection import (
+    get_3d_slice,
+    get_3d_shadow,
+    plot_3d_scatter,
+    plot_3d_slice,
+    plot_3d_shadow,
+    create_w_slice_animation,
+    create_w_slice_frames,
+    create_rotating_view,
 )

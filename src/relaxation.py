@@ -1,9 +1,17 @@
 """Lattice relaxation algorithms for energy minimization."""
 
 import numpy as np
+import sys
 from typing import Tuple, List, Dict, Optional, Callable
 from dataclasses import dataclass
 from .lattice import Lattice4D
+
+# Try to import tqdm for progress bars
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
 
 
 @dataclass
@@ -15,6 +23,31 @@ class RelaxationResult:
     final_max_force: float
     energy_history: List[float]
     force_history: List[float]
+
+
+def estimate_progress(initial_force: float, current_force: float, tolerance: float) -> float:
+    """Estimate relaxation progress based on force reduction (log scale).
+
+    Args:
+        initial_force: Starting max force
+        current_force: Current max force
+        tolerance: Target tolerance
+
+    Returns:
+        Progress percentage (0-100)
+    """
+    if current_force <= tolerance:
+        return 100.0
+    if initial_force <= tolerance:
+        return 100.0
+
+    # Use log scale since force decreases exponentially
+    log_initial = np.log10(initial_force)
+    log_current = np.log10(max(current_force, tolerance))
+    log_target = np.log10(tolerance)
+
+    progress = (log_initial - log_current) / (log_initial - log_target) * 100
+    return min(max(progress, 0), 100)
 
 
 def gradient_descent(
@@ -225,6 +258,7 @@ def relax(
     max_steps: int = 10000,
     verbose: bool = False,
     log_interval: int = 100,
+    show_progress: bool = True,
 ) -> RelaxationResult:
     """Relax lattice using specified method.
 
@@ -235,15 +269,30 @@ def relax(
         a0: Ideal bond length
         tolerance: Convergence criterion for max force
         max_steps: Maximum number of iterations
-        verbose: If True, print progress
+        verbose: If True, print detailed progress
         log_interval: Steps between progress messages
+        show_progress: If True, show progress indicator
 
     Returns:
         RelaxationResult with convergence info and history
     """
+    # Get initial force for progress estimation
+    initial_force = lattice.compute_max_force(k, a0)
+    last_progress_pct = 0
+
     def callback(step, energy, max_force):
+        nonlocal last_progress_pct
+
         if verbose and step % log_interval == 0:
-            print(f"  Step {step:5d}: E = {energy:.6f}, max|F| = {max_force:.6f}")
+            progress = estimate_progress(initial_force, max_force, tolerance)
+            print(f"  Step {step:5d}: E = {energy:.6f}, max|F| = {max_force:.6f} ({progress:.0f}% complete)")
+        elif show_progress and not verbose:
+            # Show progress milestones at 25%, 50%, 75%
+            progress = estimate_progress(initial_force, max_force, tolerance)
+            if progress >= last_progress_pct + 25:
+                last_progress_pct = int(progress // 25) * 25
+                print(f"  ... {last_progress_pct}% complete (step {step}, max|F|={max_force:.4f})")
+                sys.stdout.flush()
 
     if method == 'fire':
         return fire(lattice, k, a0, tolerance, max_steps, callback=callback)
