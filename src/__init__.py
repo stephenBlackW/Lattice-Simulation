@@ -33,3 +33,13 @@ from .projection import (
     create_w_slice_frames,
     create_rotating_view,
 )
+from .viz3d import (
+    get_3d_slice as get_3d_slice_plotly,
+    get_3d_projection,
+    create_lattice_3d_figure,
+    create_4d_slice_animation,
+    create_dislocation_core_visualization,
+    create_relaxation_animation,
+    save_figure,
+    generate_all_visualizations,
+)
